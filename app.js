@@ -1,5 +1,5 @@
 import { horizontalSwipe } from './swipe.js';
-import { isVeganMeal, isVegetarianMeal, mealTitleCodes, matchesMealFilters, cleanMealName } from './meal-filters.js';
+import { isVeganMeal, isVegetarianMeal, mealTitleCodes, matchesMealFilters, cleanMealName, repeatedDishes, repeatedDishKey } from './meal-filters.js';
 import { downloadMealCalendar } from './calendar.js';
 
 const API = 'https://api.studentenwerk-dresden.de/openmensa/v2';
@@ -9,6 +9,7 @@ const STORAGE_KEY = 'mensa-hidden-canteens-v1';
 const DIETARY_STORAGE_KEY = 'mensa-dietary-filters-v1';
 const EXCLUDED_CODES_KEY = 'mensa-excluded-codes-v1';
 const PRICE_CATEGORY_KEY = 'mensa-price-category-v1';
+const HIDDEN_REPEATS_KEY = 'mensa-hidden-repeats-v1';
 const $ = (id) => document.getElementById(id);
 const dateFormat = new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit' });
 const money = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
@@ -44,6 +45,15 @@ document.querySelectorAll('#dietary-filter input').forEach((input) => {
   input.checked = dietarySelection.has(input.value);
 });
 const excludedCodes = new Set();
+// Curated daily repeats the visitor switched off (unchecked means hidden).
+const hiddenRepeats = new Set();
+try {
+  const savedRepeats = JSON.parse(localStorage.getItem(HIDDEN_REPEATS_KEY));
+  if (Array.isArray(savedRepeats)) {
+    savedRepeats.filter((key) => repeatedDishes.some((dish) => dish.key === key))
+      .forEach((key) => hiddenRepeats.add(key));
+  }
+} catch { /* Browsing without storage is supported. */ }
 let codeLabels = new Map();
 let priceCategory = 'student';
 const priceCategories = {
@@ -218,12 +228,49 @@ function saveSelection() {
 
 function updateFilters() {
   const count = canteens.filter((canteen) => !hidden.has(canteen.id)).length;
-  $('selection-count').textContent = `${count} / ${canteens.length}`;
   $('toggle-all').disabled = false;
   $('toggle-all').textContent = count ? 'Alle abwählen' : 'Alle auswählen';
   for (const button of $('cafeteria-options').children) {
     button.setAttribute('aria-pressed', String(!hidden.has(Number(button.dataset.id))));
   }
+  updateFilterStatus();
+}
+
+// The collapsed panel stays informative: how many canteens remain, how many
+// allergen codes and daily repeats are hidden. All groups share one summary line.
+function repeatedHiddenLabel() {
+  return hiddenRepeats.size === 1
+    ? '1 wiederkehrendes Gericht ausgeblendet'
+    : `${hiddenRepeats.size} wiederkehrende Gerichte ausgeblendet`;
+}
+
+function updateFilterStatus() {
+  const parts = [];
+  if (canteens.length) {
+    parts.push(`${canteens.length - hidden.size} / ${canteens.length} Mensen`);
+  }
+  if (excludedCodes.size) parts.push(`${excludedCodes.size} Codes ausgeblendet`);
+  if (hiddenRepeats.size) parts.push(repeatedHiddenLabel());
+  $('filter-status').textContent = parts.join(' · ') || 'wird geladen …';
+}
+
+function saveHiddenRepeats() {
+  try { localStorage.setItem(HIDDEN_REPEATS_KEY, JSON.stringify([...hiddenRepeats])); } catch { /* Optional preference only. */ }
+}
+
+function renderRepeatOptions() {
+  const container = $('repeat-options');
+  container.replaceChildren(element('legend', 'sr-only', 'Wiederkehrende Gerichte anzeigen'));
+  for (const dish of repeatedDishes) {
+    const label = element('label', 'repeat-option');
+    const input = element('input');
+    input.type = 'checkbox';
+    input.dataset.key = dish.key;
+    input.checked = !hiddenRepeats.has(dish.key);
+    label.append(input, element('span', '', `${dish.label} · ${dish.canteen}`));
+    container.append(label);
+  }
+  $('reset-repeats').disabled = !hiddenRepeats.size;
 }
 
 function renderFilters() {
@@ -426,6 +473,7 @@ function renderAdditiveOptions(meals) {
   if (!options.size) container.append(element('p', 'filter-loading', 'Keine Codes in den verfügbaren Gerichtstiteln.'));
   $('additive-count').textContent = excludedCodes.size ? `${excludedCodes.size} ausgeblendet` : 'Keine ausgeblendet';
   $('clear-additives').disabled = !excludedCodes.size;
+  updateFilterStatus();
 }
 
 function tomStream(entries, { weekly }) {
@@ -511,6 +559,7 @@ async function loadMenus() {
   const evening = weekly || eveningOnly;
   const diet = new Set(dietarySelection);
   const exclusions = new Set(excludedCodes);
+  const repeats = new Set(hiddenRepeats);
   const tasks = dates.flatMap((date) => visible.map((canteen) => ({ date, canteen })));
   // Limit concurrent API requests, while preserving the official cafeteria order.
   const results = new Array(tasks.length);
@@ -537,9 +586,11 @@ async function loadMenus() {
   await Promise.all(Array.from({ length: Math.min(4, tasks.length) }, worker));
   if (version !== requestVersion) return;
   renderAdditiveOptions(results.flatMap((result) => result.meals));
-  results.forEach((result) => {
+  results.forEach((result, index) => {
+    const { canteen } = tasks[index];
     result.meals = result.meals.filter((meal) =>
-      isEveningMeal(meal) === evening && matchesMealFilters(meal, diet, exclusions));
+      isEveningMeal(meal) === evening && matchesMealFilters(meal, diet, exclusions) &&
+      !repeats.has(repeatedDishKey(canteen, meal)));
   });
   const entries = tasks.map((task, i) => ({ ...task, result: results[i] }));
   const available = entries.filter(({ result }) => result.error || result.meals.length);
@@ -554,6 +605,7 @@ async function loadMenus() {
   const dietarySummary = diet.size === 3 ? [] : [diet.size ? [...diet].map((type) => dietaryLabels[type]).join(', ') : 'Keine Ernährungsart ausgewählt'];
   $('results-summary').textContent = [dateLabel, evening ? 'Abend' : 'Mittag', ...dietarySummary,
     ...(exclusions.size ? [`Ausgeblendet: ${[...exclusions].join(', ')}`] : []),
+    ...(repeats.size ? [repeatedHiddenLabel()] : []),
     `${new Set(available.map(({ canteen }) => canteen.id)).size} Mensen`, `${total} Gerichte`, ...(errors ? [`${errors} nicht abrufbar`] : [])].join(' · ');
 }
 
@@ -576,6 +628,7 @@ async function init() {
     await loadMenus();
   } catch {
     $('cafeteria-options').replaceChildren(element('span', 'filter-loading', 'Mensen zurzeit nicht verfügbar.'));
+    $('filter-status').textContent = 'nicht verfügbar';
     $('results-summary').textContent = 'Die Verbindung zur Speiseplan-API ist fehlgeschlagen.';
     $('menus').setAttribute('aria-busy', 'false');
     $('menus').replaceChildren(message('Speiseplan nicht erreichbar', 'Bitte prüfe deine Internetverbindung und versuche es noch einmal.', init));
@@ -613,6 +666,21 @@ $('clear-additives').addEventListener('click', () => {
   saveExcludedCodes();
   if (canteens.length) loadMenus();
 });
+$('repeat-options').addEventListener('change', (event) => {
+  const { key } = event.target.dataset;
+  if (!repeatedDishes.some((dish) => dish.key === key)) return;
+  event.target.checked ? hiddenRepeats.delete(key) : hiddenRepeats.add(key);
+  saveHiddenRepeats();
+  $('reset-repeats').disabled = !hiddenRepeats.size;
+  if (canteens.length) loadMenus();
+});
+$('reset-repeats').addEventListener('click', () => {
+  hiddenRepeats.clear();
+  saveHiddenRepeats();
+  for (const input of $('repeat-options').querySelectorAll('input')) input.checked = true;
+  $('reset-repeats').disabled = true;
+  if (canteens.length) loadMenus();
+});
 $('evening-switch').checked = eveningOnly;
 $('evening-switch').addEventListener('change', (event) => {
   eveningOnly = event.target.checked;
@@ -640,4 +708,5 @@ $('toggle-all').addEventListener('click', () => {
   updateFilters();
   loadMenus();
 });
+renderRepeatOptions();
 init();

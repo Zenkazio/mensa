@@ -188,7 +188,7 @@ try {
     }
   }
   assert(win().testRequests.length === requestsBeforeDietChanges, 'All dietary modes reuse cached raw menus');
-  doc().querySelector('.additive-filter').open = true;
+  doc().querySelector('.filter-panel').open = true;
   const chooseCode = async (code) => {
     const input = doc().querySelector(`#additive-options input[data-code="${code}"]`);
     assert(input, `Code ${code} offered`);
@@ -238,6 +238,32 @@ try {
   doc().querySelector('.cafeteria-chip[data-id="1"]').click();
   await ready();
   pass('All eight dietary multiselect combinations, exact/numeric additive exclusions, reset/focus, cached menus, responsive controls and empty states');
+
+  // Curated daily-repeat list: reload with a cafeteria named like the real one and a
+  // dish carrying the curated title, so canteen-plus-title matching is exercised.
+  const repeatFixtures = fixtures
+    .replace("name:'Selected A'", "name:'Neue Mensa'")
+    .replace('meal(1),meal(2),meal(3),meal(4),',
+      "meal(1),meal(2),meal(3),meal(4),{...meal(7),name:'Kleines Softeis in der Waffel (A, A1)'},");
+  await load(repeatFixtures);
+  const repeatInput = () => doc().querySelector('#repeat-options input[data-key="neue-mensa-softeis"]');
+  const repeatNames = () => [...doc().querySelectorAll('#menus .meal-name')].map((node) => node.textContent);
+  assert(doc().querySelectorAll('#repeat-options input').length === 4, 'Four curated repeat dishes are offered');
+  assert([...doc().querySelectorAll('#repeat-options input')].every((input) => input.checked),
+    'Curated repeats are shown by default');
+  assert(repeatNames().some((name) => name.startsWith('Kleines Softeis')), 'Daily repeat is in the grid');
+  repeatInput().click();
+  await ready();
+  assert(!repeatNames().some((name) => name.startsWith('Kleines Softeis')), 'Unchecked repeat is hidden');
+  assert(doc().querySelector('#filter-status').textContent.includes('1 wiederkehrendes Gericht'),
+    'Collapsed filter summary reports the hidden repeat');
+  assert(doc().querySelector('#results-summary').textContent.includes('1 wiederkehrendes Gericht'),
+    'Result summary reports the hidden repeat');
+  doc().querySelector('#reset-repeats').click();
+  await ready();
+  assert(repeatInput().checked && repeatNames().some((name) => name.startsWith('Kleines Softeis')),
+    'Reset shows the repeat again');
+  pass('Curated daily-repeat list hides and restores one dish per cafeteria');
 
   const reducedMotionRule = [...doc().styleSheets[0].cssRules].find(
     (rule) => rule.conditionText === '(prefers-reduced-motion: reduce)'

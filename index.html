@@ -36,11 +36,37 @@
           <input id="date-input" type="date" aria-label="Datum des Speiseplans wählen" title="Montag bis Freitag. Wochenenddaten werden auf Montag verschoben.">
         </div>
         <div class="filter-toolbar">
-          <details class="cafeteria-filter">
-            <summary>Mensen <span id="selection-count"></span></summary>
+          <details class="filter-panel">
+            <summary>Filter <span id="filter-status" class="filter-status">wird geladen …</span></summary>
             <div class="filter-content">
-              <button id="toggle-all" class="text-button" disabled>Alle abwählen</button>
-              <div id="cafeteria-options" class="cafeteria-options"><span class="filter-loading">Mensen werden geladen …</span></div>
+              <section class="filter-group" aria-labelledby="cafeteria-heading">
+                <div class="filter-group-head">
+                  <h3 id="cafeteria-heading" class="filter-group-title">Mensen</h3>
+                  <button id="toggle-all" class="text-button" type="button" disabled>Alle abwählen</button>
+                </div>
+                <div id="cafeteria-options" class="cafeteria-options"><span class="filter-loading">Mensen werden geladen …</span></div>
+              </section>
+              <section class="filter-group" aria-labelledby="repeat-heading" aria-describedby="repeat-hint">
+                <div class="filter-group-head">
+                  <h3 id="repeat-heading" class="filter-group-title">Wiederkehrende Gerichte</h3>
+                  <button id="reset-repeats" class="text-button" type="button" disabled>Alle anzeigen</button>
+                </div>
+                <p id="repeat-hint">Gerichte, die jeden Wochentag im Speiseplan stehen. Häkchen entfernen blendet sie aus.</p>
+                <fieldset id="repeat-options" class="repeat-options">
+                  <legend class="sr-only">Wiederkehrende Gerichte anzeigen</legend>
+                </fieldset>
+              </section>
+              <section class="filter-group" aria-labelledby="additive-heading" aria-describedby="additive-hint">
+                <div class="filter-group-head">
+                  <h3 id="additive-heading" class="filter-group-title">Allergene &amp; Zusatzstoffe <span id="additive-count">Keine ausgeblendet</span></h3>
+                  <button id="clear-additives" class="text-button" type="button" disabled>Auswahl zurücksetzen</button>
+                </div>
+                <p id="additive-hint">Codes auswählen, um Gerichte damit auszublenden. Es zählen nur Codes in Klammern im Gerichtstitel. Fehlende Kennzeichnungen bedeuten nicht allergenfrei; bitte Hinweise des Studentenwerks prüfen.</p>
+                <fieldset id="additive-options" class="additive-options">
+                  <legend class="sr-only">Gerichte mit diesen Codes ausblenden</legend>
+                  <span class="filter-loading">Codes werden geladen …</span>
+                </fieldset>
+              </section>
             </div>
           </details>
           <div class="quick-filters">
@@ -70,17 +96,6 @@
               <span class="layout-option layout-week">Woche</span>
             </label>
           </div>
-          <details class="additive-filter">
-            <summary>Allergene & Zusatzstoffe <span id="additive-count">Keine ausgeblendet</span></summary>
-            <div class="additive-content">
-              <p id="additive-hint">Codes auswählen, um Gerichte damit auszublenden. Es zählen nur Codes in Klammern im Gerichtstitel. Fehlende Kennzeichnungen bedeuten nicht allergenfrei; bitte Hinweise des Studentenwerks prüfen.</p>
-              <button id="clear-additives" class="text-button" type="button" disabled>Auswahl zurücksetzen</button>
-              <fieldset id="additive-options" class="additive-options" aria-describedby="additive-hint">
-                <legend class="sr-only">Gerichte mit diesen Codes ausblenden</legend>
-                <span class="filter-loading">Codes werden geladen …</span>
-              </fieldset>
-            </div>
-          </details>
         </div>
       </section>
 

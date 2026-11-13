@@ -30,6 +30,33 @@ export function mealTitleCodes(meal) {
   return codes;
 }
 
+// Dishes the Studentenwerk repeats on every weekday. The API has no "recurring"
+// flag, so these are matched by cafeteria name plus a distinctive phrase of the
+// dish title. The list is curated from the week of 2026-11-09 (KW46) and only
+// covers the dishes checked there; extend it after inspecting a week's data.
+// Phrases must be distinctive: on 2026-11-12 Siedepunkt also served a plain
+// "Blumenkohlschnitzel mit Kohlrabi-Erbsengemüse", which is a different dish.
+export const repeatedDishes = [
+  { key: 'siedepunkt-salat-blumenkohl', canteen: 'Mensa Siedepunkt', phrase: 'dazu Blumenkohlschnitzel',
+    label: 'Bunte Salatvariation mit Blumenkohlschnitzel' },
+  { key: 'siedepunkt-salat-haehnchennuggets', canteen: 'Mensa Siedepunkt', phrase: 'dazu Hähnchennuggets',
+    label: 'Bunte Salatvariation mit Hähnchennuggets' },
+  { key: 'neue-mensa-softeis', canteen: 'Neue Mensa', phrase: 'Kleines Softeis in der Waffel',
+    label: 'Kleines Softeis in der Waffel' },
+  { key: 'alte-mensa-salattheke', canteen: 'Alte Mensa', phrase: 'unsere Salattheke',
+    label: 'Salattheke' },
+];
+
+const repeatedPhrases = repeatedDishes.map((dish) => ({ ...dish, phrase: dish.phrase.toLowerCase() }));
+
+// Key of the curated repeat this meal belongs to, or undefined.
+export function repeatedDishKey(canteen, meal) {
+  const canteenName = canteen?.name;
+  if (typeof canteenName !== 'string' || typeof meal?.name !== 'string') return undefined;
+  const name = meal.name.toLowerCase();
+  return repeatedPhrases.find((dish) => dish.canteen === canteenName && name.includes(dish.phrase))?.key;
+}
+
 export function matchesMealFilters(meal, categories, excludedCodes) {
   return categories.has(dietaryCategory(meal)) &&
     ![...mealTitleCodes(meal)].some((code) => excludedCodes.has(code));
